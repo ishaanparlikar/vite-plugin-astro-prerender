@@ -1,26 +1,109 @@
-{	
+{
+	"name": "vite-plugin-astro-prerender",
+	"version": "0.1.22",
+	"description": "A Vite plugin for Astro that prerenders components to static HTML and generates optimized CSS with Tailwind tree-shaking for lazy-loading below-the-fold content",
 	"author": {
 		"name": "Ishan Parlikar"
 	},
-	"keywords": ["vite", "vite-plugin", "astro", "prerender"],
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/ishaanparlikar/vite-plugin-astro-prerender.git"
+	},
+	"bugs": {
+		"url": "https://github.com/ishaanparlikar/vite-plugin-astro-prerender/issues"
+	},
+	"homepage": "https://github.com/ishaanparlikar/vite-plugin-astro-prerender#readme",
+	"keywords": [
+		"vite",
+		"vite-plugin",
+		"astro",
+		"astro-integration",
+		"prerender",
+		"static-html",
+		"lazy-loading",
+		"lazy-load",
+		"performance",
+		"optimization",
+		"tailwind",
+		"tailwindcss",
+		"css",
+		"tree-shaking",
+		"ssr",
+		"ssg",
+		"components",
+		"html-fragments"
+	],
 	"type": "module",
+	"main": "./dist/index.js",
+	"module": "./dist/index.js",
+	"types": "./dist/index.d.ts",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js",
+			"default": "./dist/index.js"
+		},
+		"./client": {
+			"types": "./dist/client.d.ts",
+			"import": "./dist/client.js",
+			"default": "./dist/client.js"
+		},
+		"./package.json": "./package.json"
+	},
+	"files": [
+		"dist",
+		"README.md",
+		"LICENSE"
+	],
+	"sideEffects": false,
+	"engines": {
+		"node": ">=18.0.0"
+	},
 	"scripts": {
 		"build": "tsup",
-		"dev": "tsup --watch"
+		"dev": "tsup --watch",
+		"prepublishOnly": "pnpm build"
+	},
+	"peerDependencies": {
+		"@astrojs/compiler": "^2.0.0",
+		"astro": "^5.0.0",
+		"autoprefixer": "^10.0.0",
+		"postcss": "^8.0.0",
+		"tailwindcss": "^3.0.0 || ^4.0.0"
+	},
+	"peerDependenciesMeta": {
+		"tailwindcss": {
+			"optional": true
+		},
+		"autoprefixer": {
+			"optional": true
+		},
+		"postcss": {
+			"optional": true
+		}
+	},
+	"dependencies": {
+		"cheerio": "^1.1.2",
+		"chokidar": "^5.0.0",
+		"consola": "^3.4.2",
+		"fast-glob": "^3.3.3",
+		"flat-cache": "^6.1.19",
+		"fs-extra": "^11.3.3",
+		"html-minifier-terser": "^7.2.0"
 	},
 	"devDependencies": {
 		"@astrojs/compiler": "^2.13.0",
+		"@types/flat-cache": "^2.0.2",
+		"@types/fs-extra": "^11.0.4",
+		"@types/html-minifier-terser": "^7.0.2",
 		"@types/node": "^25.0.6",
 		"astro": "^5.16.8",
 		"autoprefixer": "^10.4.23",
-		"chokidar": "^5.0.0",
 		"postcss": "^8.5.6",
 		"tailwindcss": "^3.4.19",
 		"tsup": "^8.5.1",
-		"typescript": "^5.9.3"
-	},
-	"dependencies": {
-		"@astrojs/ts-plugin": "^1.10.6",
-		"consola": "^3.4.2"
+		"typescript": "^5.9.3",
+		"vite": "^6.4.1"
 	}
 }

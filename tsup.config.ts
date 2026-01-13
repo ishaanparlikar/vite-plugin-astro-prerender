@@ -7,7 +7,17 @@ export default defineConfig([
         dts: true,
         sourcemap: true,
         platform: "node",
-        clean: true,
+        clean: false,
+        minify: true,
+        target: "es2018"
+    },
+    {
+        entry: ["src/client.ts"],
+        format: "esm",
+        dts: true,
+        sourcemap: true,
+        platform: "browser",
+        clean: false,
         minify: true,
         target: "es2018"
     }
