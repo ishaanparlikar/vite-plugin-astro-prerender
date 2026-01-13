@@ -1,110 +1,131 @@
+// src/utils/index.ts
 import { createHash } from 'node:crypto';
-import { readdir, readFile, stat, writeFile, mkdir } from 'node:fs/promises';
-import { join, relative } from 'node:path';
- 
-/**
- * Create a logger with colored output
- */
-export function createLogger(name) {
-  return {
-    info: (msg) => console.log(`\x1b[36m[${name}]\x1b[0m ${msg}`),
-    success: (msg) => console.log(`\x1b[32m[${name}]\x1b[0m ${msg}`),
-    warn: (msg) => console.warn(`\x1b[33m[${name}]\x1b[0m ${msg}`),
-    error: (msg) => console.error(`\x1b[31m[${name}]\x1b[0m ${msg}`),
-  };
-}
- 
+import { readFile } from 'node:fs/promises';
+import fg from 'fast-glob';
+import { outputFile, ensureDir as fsEnsureDir } from 'fs-extra';
+import * as cheerio from 'cheerio';
+
+// Re-export logger
+export { createLogger, type Logger } from './logger';
+
 /**
  * Get MD5 hash of file content
  */
-export async function getFileHash(filePath) {
+export async function getFileHash(filePath: string): Promise<string> {
   const content = await readFile(filePath, 'utf-8');
   return createHash('md5').update(content).digest('hex');
 }
- 
+
 /**
- * Find all .astro files recursively in a directory
+ * Find all .astro files recursively in a directory using fast-glob
  */
-export async function findComponents(dir) {
-  const components = [];
-  const entries = await readdir(dir, { withFileTypes: true });
- 
-  for (const entry of entries) {
-    const fullPath = join(dir, entry.name);
-    if (entry.isDirectory()) {
-      components.push(...(await findComponents(fullPath)));
-    } else if (entry.isFile() && entry.name.endsWith('.astro')) {
-      components.push(fullPath);
-    }
+export async function findComponents(dir: string): Promise<string[]> {
+  try {
+    return await fg('**/*.astro', {
+      cwd: dir,
+      absolute: true,
+      ignore: ['**/node_modules/**'],
+    });
+  } catch {
+    // Directory doesn't exist or is not accessible
+    return [];
   }
- 
-  return components;
 }
- 
+
 /**
- * Extract Tailwind classes from HTML
+ * Extract Tailwind classes from HTML using Cheerio
  */
-export function extractClasses(html) {
-  const classMatches = html.matchAll(/class="([^"]*)"/g);
-  const classes = new Set();
- 
-  for (const match of classMatches) {
-    const classList = match[1].split(/\s+/);
+export function extractClasses(html: string): string[] {
+  const $ = cheerio.load(html);
+  const classes = new Set<string>();
+
+  $('[class]').each((_, el) => {
+    const classList = $(el).attr('class')?.split(/\s+/) || [];
     classList.forEach((cls) => {
       if (cls) classes.add(cls);
     });
-  }
- 
+  });
+
   return Array.from(classes);
 }
- 
+
 /**
- * Extract style tags from HTML
+ * Extract style tags from HTML using Cheerio
  */
-export function extractStyles(html) {
-  const styleMatches = html.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/gi);
-  const styles = [];
- 
-  for (const match of styleMatches) {
-    styles.push(match[1]);
-  }
- 
+export function extractStyles(html: string): string[] {
+  const $ = cheerio.load(html);
+  const styles: string[] = [];
+
+  $('style').each((_, el) => {
+    const content = $(el).html();
+    if (content?.trim()) {
+      styles.push(content);
+    }
+  });
+
   return styles;
 }
- 
+
 /**
- * Clean HTML output by removing unnecessary elements
+ * Clean HTML output by removing unnecessary elements using Cheerio
  */
-export function cleanHTML(html) {
+export function cleanHTML(html: string): string {
+  const $ = cheerio.load(html);
+
   // Remove script tags
-  html = html.replace(
-    /<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi,
-    '',
-  );
-  // Remove data-astro-source-file and data-astro-source-loc attributes
-  html = html.replace(/\s*data-astro-source-[^=]*="[^"]*"/g, '');
+  $('script').remove();
+
   // Remove style tags (they're externalized)
-  html = html.replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '');
-  return html.trim();
+  $('style').remove();
+
+  // Remove data-astro-* attributes
+  $('*').each((_, el) => {
+    const $el = $(el);
+    const attrs = (el as unknown as { attribs?: Record<string, string> }).attribs || {};
+
+    Object.keys(attrs).forEach((attr) => {
+      if (attr.startsWith('data-astro-source-') || attr.startsWith('data-astro-cid-')) {
+        $el.removeAttr(attr);
+      }
+    });
+  });
+
+  // Get the body content (Cheerio wraps in html/head/body)
+  const body = $('body').html();
+  return body?.trim() || $.html().trim();
 }
- 
+
 /**
- * Ensure directory exists
+ * Minify HTML using html-minifier-terser
  */
-export async function ensureDir(dir) {
+export async function minifyHTML(html: string): Promise<string> {
   try {
-    await mkdir(dir, { recursive: true });
+    const { minify } = await import('html-minifier-terser');
+
+    return await minify(html, {
+      collapseWhitespace: true,
+      removeComments: true,
+      removeRedundantAttributes: true,
+      removeEmptyAttributes: true,
+      minifyCSS: true,
+      minifyJS: true,
+      conservativeCollapse: true,
+      preserveLineBreaks: false,
+    });
   } catch (error) {
-    if (error.code !== 'EEXIST') throw error;
+    console.warn('html-minifier-terser not available, skipping minification');
+    return html;
   }
 }
- 
+
 /**
- * Write file with directory creation
+ * Ensure directory exists (using fs-extra)
  */
-export async function writeFileWithDir(filePath, content) {
-  const dir = join(filePath, '..');
-  await ensureDir(dir);
-  await writeFile(filePath, content, 'utf-8');
+export { fsEnsureDir as ensureDir };
+
+/**
+ * Write file with directory creation (using fs-extra)
+ */
+export async function writeFileWithDir(filePath: string, content: string): Promise<void> {
+  await outputFile(filePath, content, 'utf-8');
 }
- 
