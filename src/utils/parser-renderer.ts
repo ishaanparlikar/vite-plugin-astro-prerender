@@ -1,136 +1,172 @@
-//parser-renderer
+// src/utils/parser-renderer.ts
 import { parse } from '@astrojs/compiler';
 import { readFile } from 'node:fs/promises';
- 
+import { consola } from 'consola';
+import type { RootNode, Node, ElementNode, AttributeNode } from '@astrojs/compiler/types';
+
 /**
  * Renders components using Astro's AST parser
  * Simpler approach but doesn't resolve component imports
  */
 export class ParserRenderer {
-  constructor(logger) {
-    this.logger = logger;
-  }
- 
+  private logger = consola.withTag('ParserRenderer');
+
   /**
    * Extract frontmatter variables from AST
    */
-  extractFrontmatter(ast) {
-    const frontmatter = ast.frontmatter;
-    if (!frontmatter) return {};
- 
-    const vars = {};
+  private extractFrontmatter(ast: RootNode): Record<string, string> {
+    const frontmatter = (ast as unknown as { frontmatter?: { value?: string } }).frontmatter;
+    if (!frontmatter || typeof frontmatter.value !== 'string') return {};
+
+    const vars: Record<string, string> = {};
     const code = frontmatter.value;
- 
-    // Simple extraction of const/let/var declarations
+
+    // Safe regex with limits
     const varMatches = code.matchAll(
-      /(?:const|let|var)\s+(\w+)\s*=\s*["']([^"']+)["']/g,
+      /(?:const|let|var)\s+(\w+)\s*=\s*["']([^"']+)["']/g
     );
+
     for (const match of varMatches) {
-      vars[match[1]] = match[2];
+      if (match[1] && match[2]) {
+        vars[match[1]] = match[2];
+      }
     }
- 
+
     return vars;
   }
- 
-  /**
-   * Extract template content from AST
-   */
-  extractTemplate(ast) {
-    return ast.html;
-  }
- 
+
   /**
    * Convert AST node to HTML string
    */
-  nodeToHTML(node, indent = '') {
+  private nodeToHTML(node: Node, indent = ''): string {
     if (node.type === 'text') {
-      return node.value;
-    }
- 
-    if (node.type === 'element') {
-      const attrs = node.attributes
-        .map((attr) => {
-          if (attr.kind === 'quoted') {
+      return (node as { type: 'text'; value: string }).value;
+    } else if (node.type === 'element') {
+      const elementNode = node as ElementNode;
+      const attrs = elementNode.attributes
+        .map((attr: AttributeNode) => {
+          if (attr.kind === 'quoted' && attr.name && attr.value) {
             return `${attr.name}="${attr.value}"`;
-          } else if (attr.kind === 'empty') {
+          } else if (attr.kind === 'empty' && attr.name) {
             return attr.name;
           }
           return '';
         })
         .filter(Boolean)
         .join(' ');
- 
-      const openTag = attrs ? `<${node.name} ${attrs}>` : `<${node.name}>`;
- 
-      if (node.children.length === 0) {
-        // Self-closing or empty element
-        if (['img', 'br', 'hr', 'input', 'meta', 'link'].includes(node.name)) {
-          return openTag.replace('>', ' />');
+
+      const openTag = attrs ? `<${elementNode.name} ${attrs}>` : `<${elementNode.name}>`;
+
+      if (!elementNode.children || elementNode.children.length === 0) {
+        // Self-closing tags
+        if (['img', 'br', 'hr', 'input', 'meta', 'link'].includes(elementNode.name)) {
+          return `${openTag.replace('>', ' />')}`;
         }
-        return `${openTag}</${node.name}>`;
+        return `${openTag}</${elementNode.name}>`;
       }
- 
-      const children = node.children
-        .map((child) => this.nodeToHTML(child, indent + '  '))
-        .join('');
-      return `${openTag}${children}</${node.name}>`;
-    }
- 
-    if (node.type === 'component') {
-      // Components won't be resolved in this renderer
+
+      const children = elementNode.children
+        .map((child: Node) => this.nodeToHTML(child, indent + '  '))
+        .join('\n');
+
+      return `${openTag}${children}</${elementNode.name}>`;
+    } else if (node.type === 'component') {
+      const componentNode = node as { type: 'component'; name: string };
+      // Warning for unmatched components
       this.logger.warn(
-        `Component <${node.name} /> found but won't be resolved (use container renderer for imports)`,
+        `Component <${componentNode.name} /> found but won't be resolved (use container renderer for imports)`,
       );
-      return `<!-- Component: ${node.name} -->`;
+
+      return `<!-- Component: ${componentNode.name} -->`;
+    } else if (node.type === 'expression') {
+      return `{${String(node)}}`;
+    } else if (node.type === 'frontmatter') {
+      // Skip frontmatter nodes
+      return '';
+    } else if ((node as { type: string }).type === 'style') {
+      // Handle style nodes - include them so they get extracted
+      const styleNode = node as unknown as { type: 'style'; attributes: AttributeNode[]; children: Node[] };
+      const attrs = (styleNode.attributes || [])
+        .map((attr: AttributeNode) => {
+          if (attr.kind === 'quoted' && attr.name && attr.value) {
+            return `${attr.name}="${attr.value}"`;
+          } else if (attr.kind === 'empty' && attr.name) {
+            return attr.name;
+          }
+          return '';
+        })
+        .filter(Boolean)
+        .join(' ');
+
+      const openTag = attrs ? `<style ${attrs}>` : '<style>';
+
+      // Try to get content from children
+      const content = (styleNode.children || [])
+        .map((child: Node) => {
+          if (child.type === 'text') {
+            return (child as { type: 'text'; value: string }).value;
+          }
+          return '';
+        })
+        .join('');
+
+      // If no children, try to get content directly
+      const directContent = (node as { content?: string }).content || '';
+
+      return `${openTag}${content || directContent}</style>`;
     }
- 
-    if (node.type === 'expression') {
-      return `{${node.value}}`;
-    }
- 
+
     return '';
   }
- 
+
   /**
    * Replace frontmatter variable expressions in HTML
    */
-  replaceFrontmatterVars(html, vars) {
+  private replaceFrontmatterVars(html: string, vars: Record<string, string>): string {
+    let result = html;
     for (const [key, value] of Object.entries(vars)) {
-      const regex = new RegExp(`\\{${key}\\}`, 'g');
-      html = html.replace(regex, value);
+      // Safe regex replacement
+      const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const regex = new RegExp(`\\{${escapedKey}\\}`, 'g');
+      result = result.replace(regex, value);
     }
-    return html;
+    return result;
   }
- 
+
   /**
    * Render a component to HTML
    */
-  async render(componentPath) {
+  async render(filePath: string): Promise<string> {
+    this.logger.info(`Rendering component: ${filePath}`);
+
     try {
-      const fileContent = await readFile(componentPath, 'utf-8');
- 
-      // Parse the Astro file
+      // Read and parse component
+      const fileContent = await readFile(filePath, 'utf-8');
+
+      // Parse Astro file
       const result = await parse(fileContent);
       const ast = result.ast;
- 
-      // Extract frontmatter variables
+
+      // Extract and log frontmatter variables
       const vars = this.extractFrontmatter(ast);
- 
-      // Get the HTML template
-      const templateHTML = this.extractTemplate(ast);
- 
-      // Convert AST to HTML string
+      this.logger.debug(`Extracted ${Object.keys(vars).length} frontmatter variables`);
+
+      // Convert AST to HTML
       let html = '';
       if (ast.children) {
-        html = ast.children.map((child) => this.nodeToHTML(child)).join('');
+        html = ast.children.map((child: Node) => this.nodeToHTML(child)).join('\n');
       }
- 
-      // Replace variable expressions
+
+      // Replace variables
       html = this.replaceFrontmatterVars(html, vars);
- 
+
+      // Success logging
+      this.logger.success(`Rendered ${filePath} (${html.length} chars)`);
+
       return html;
-    } catch (error) {
-      this.logger.error(`Failed to render ${componentPath}: ${error.message}`);
+    } catch (error: unknown) {
+      const err = error as Error;
+      this.logger.error(`Failed to render ${filePath}: ${err.message}`);
       throw error;
     }
   }
