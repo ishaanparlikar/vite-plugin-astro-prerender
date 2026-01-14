@@ -38,6 +38,8 @@ export interface PluginOptions {
   renderer?: 'parser' | 'container';
   /** Minify HTML output to reduce file size (default: true) */
   minify?: boolean;
+  /** Base URL path for the site (e.g., '/my-subdir'). Read from Astro config if not specified. */
+  base?: string;
 }
 
 // ============================================================================
@@ -55,7 +57,10 @@ export function astroPrerenderPlugin({
   tailwindConfigPath = 'tailwind.config.mjs',
   renderer = 'parser',
   minify = true,
+  base = '',
 }: PluginOptions = {}): VitePlugin {
+  // Normalize base path: ensure it starts with / and doesn't end with /
+  const normalizedBase = base ? (base.startsWith('/') ? base : '/' + base).replace(/\/$/, '') : '';
   const logger = createLogger('astro-prerender');
   let config: ResolvedConfig | null = null;
   let cacheManager: CacheManager | null = null;
@@ -200,8 +205,34 @@ export function astroPrerenderPlugin({
     await cssGenerator.generate(cssOutputPath);
   }
 
+  // Compute the prerendered path relative to public (e.g., 'prerendered' from 'public/prerendered')
+  const prerenderedPath = outputDir.replace(/^public\/?/, '');
+
   return {
     name: 'astro-prerender-plugin',
+
+    resolveId(id: string) {
+      if (id === 'virtual:astro-prerender-config') {
+        return id; // Return the id as-is, no prefix needed
+      }
+      return null;
+    },
+
+    load(id: string) {
+      if (id === 'virtual:astro-prerender-config') {
+        // Export config for client-side usage
+        const clientConfig = {
+          base: normalizedBase,
+          prerenderedPath: `${normalizedBase}/${prerenderedPath}`,
+          cssPath: `${normalizedBase}/${prerenderedPath}/lazy-components.css`,
+        };
+        return `export const base = ${JSON.stringify(normalizedBase)};
+export const prerenderedPath = ${JSON.stringify(clientConfig.prerenderedPath)};
+export const cssPath = ${JSON.stringify(clientConfig.cssPath)};
+export default ${JSON.stringify(clientConfig)};`;
+      }
+      return null;
+    },
 
     configResolved(resolvedConfig: ResolvedConfig) {
       config = resolvedConfig;
@@ -301,10 +332,13 @@ export function astroPrerenderIntegration(options: PluginOptions = {}): AstroInt
   return {
     name: 'astro-prerender-integration',
     hooks: {
-      'astro:config:setup': ({ updateConfig }) => {
+      'astro:config:setup': ({ config, updateConfig }) => {
+        // Read base from Astro config if not explicitly provided
+        const baseFromConfig = options.base ?? config.base ?? '';
+
         updateConfig({
           vite: {
-            plugins: [astroPrerenderPlugin(options)],
+            plugins: [astroPrerenderPlugin({ ...options, base: baseFromConfig })],
           },
         });
       },
