@@ -117,12 +117,13 @@ export class LazyHTMLLoader {
     }>();
 
     constructor(config: LazyLoaderConfig = {}) {
+        const baseUrl = config.baseUrl ?? '/prerendered';
         this.config = {
-            baseUrl: config.baseUrl ?? '/prerendered',
+            baseUrl,
             cssModules: config.cssModules ?? false,
-            manifestUrl: config.manifestUrl ?? '/prerendered/manifest.json',
-            baseCssUrl: config.baseCssUrl ?? '/prerendered/base.css',
-            legacyCssUrl: config.legacyCssUrl ?? '/prerendered/lazy-components.css',
+            manifestUrl: config.manifestUrl ?? `${baseUrl}/manifest.json`,
+            baseCssUrl: config.baseCssUrl ?? `${baseUrl}/base.css`,
+            legacyCssUrl: config.legacyCssUrl ?? `${baseUrl}/lazy-components.css`,
             preloadCSS: config.preloadCSS ?? false,
             cacheHTML: config.cacheHTML ?? true,
             enableRetry: config.enableRetry ?? true,
