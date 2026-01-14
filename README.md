@@ -263,6 +263,7 @@ import type {
 
 While powerful, this plugin has some limitations to keep in mind:
 
+- **JavaScript Expressions (Parser Renderer)**: The `parser` renderer does not evaluate JavaScript expressions like `{items.map(...)}` or `{variable}` (except simple frontmatter string variables). If you use dynamic expressions, they will render as `[object Object]`. Use static HTML in your lazy components, or ensure the `container` renderer is working properly.
 - **Client Interaction**: Components are prerendered as static HTML. While you can include scripts, complex Astro client-side state (like `base` or shared Nanostores) might require careful manual setup in the target page.
 - **Component Imports**: The default `parser` renderer cannot resolve component imports (e.g., `<Button />`). Use the `container` renderer for components with nested dependencies.
 - **Vite Dependency**: The `container` renderer requires a running Vite dev server to perform SSR module loading.
