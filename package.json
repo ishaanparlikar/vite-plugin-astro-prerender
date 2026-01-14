@@ -1,6 +1,6 @@
 {
 	"name": "vite-plugin-astro-prerender",
-	"version": "0.2.0",
+	"version": "0.2.1",
 	"description": "A Vite plugin for Astro that prerenders components to static HTML and generates optimized CSS with Tailwind tree-shaking for lazy-loading below-the-fold content",
 	"author": {
 		"name": "Ishan Parlikar"
