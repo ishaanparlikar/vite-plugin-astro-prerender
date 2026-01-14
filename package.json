@@ -13,7 +13,7 @@
 	"bugs": {
 		"url": "https://github.com/ishaanparlikar/vite-plugin-astro-prerender/issues"
 	},
-	"homepage": "https://github.com/ishaanparlikar/vite-plugin-astro-prerender#readme",
+	"homepage": "https://ishaanparlikar.github.io/astro-prerender-plugin",
 	"keywords": [
 		"vite",
 		"vite-plugin",
